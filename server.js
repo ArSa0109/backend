@@ -8,9 +8,7 @@ require('dotenv').config();
 const app = express();
 const server = http.createServer(app);
 const allowedOrigins = [
-  "http://localhost:5173",
-  "https://annoymeet.vercel.app",
-  "https://annoymeet.onrender.com"
+  "http://localhost:5173"
 ];
 
 const io = socketIo(server, {
@@ -34,6 +32,7 @@ const filter = new Filter();
 // Store active rooms and users
 const rooms = new Map();
 const userSockets = new Map();
+const roomCleanupTimers = new Map();
 
 // Helper functions
 const getRoomMembers = (roomId) => {
@@ -42,6 +41,12 @@ const getRoomMembers = (roomId) => {
 };
 
 const addUserToRoom = (roomId, userId, socketId, anonymousId) => {
+  if (roomCleanupTimers.has(roomId)) {
+    clearTimeout(roomCleanupTimers.get(roomId));
+    roomCleanupTimers.delete(roomId);
+    console.log(`Canceled cleanup for room ${roomId}`);
+  }
+
   if (!rooms.has(roomId)) {
     rooms.set(roomId, {
       id: roomId,
@@ -66,7 +71,13 @@ const removeUserFromRoom = (roomId, userId) => {
   if (room) {
     room.members.delete(userId);
     if (room.members.size === 0) {
-      rooms.delete(roomId);
+      console.log(`Room ${roomId} is empty, starting cleanup timer.`);
+      const timerId = setTimeout(() => {
+        rooms.delete(roomId);
+        roomCleanupTimers.delete(roomId);
+        console.log(`Cleaned up empty room ${roomId}`);
+      }, 30000); // 30 seconds
+      roomCleanupTimers.set(roomId, timerId);
     }
   }
 };
